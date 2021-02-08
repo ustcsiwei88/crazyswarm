@@ -21,7 +21,7 @@
 	url = https://github.com/USC-ACTLab/libobjecttracker
 [submodule "ros_ws/src/externalDependencies/libmotioncapture"]
 	path = ros_ws/src/externalDependencies/libmotioncapture
-	url = https://github.com/ustcsiwei88/libmotioncapture.git
+	url = https://github.com/ustcsiwei88/libmotioncapture
 [submodule "ros_ws/src/crazyflie_ros"]
 	path = ros_ws/src/crazyflie_ros
 	url = https://github.com/whoenig/crazyflie_ros.git
