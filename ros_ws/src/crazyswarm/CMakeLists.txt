@@ -135,7 +135,7 @@ include_directories(
 link_directories(
   ${LIBMOTIONCAPTURE_LINK_DIR}
 )
-
+set(ENABLE_OPTITRACK, 1)
 if (ENABLE_VICON)
   add_definitions(-DENABLE_VICON)
 endif()

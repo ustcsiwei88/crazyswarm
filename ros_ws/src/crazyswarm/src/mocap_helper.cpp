@@ -47,9 +47,10 @@ int main(int argc, char **argv)
 #ifdef ENABLE_OPTITRACK
   else if (motionCaptureType == "optitrack")
   {
+    printf("\n\nOptitrack is enabled\n\n");
     std::string hostName;
     nl.getParam("optitrack_host_name", hostName);
-    mocap = new libmotioncapture::MotionCaptureOptitrack(hostName);
+    mocap = new libmotioncapture::MotionCaptureOptitrack(hostName, std::vector<Eigen::Vector3f>());
   }
 #endif
 #ifdef ENABLE_PHASESPACE

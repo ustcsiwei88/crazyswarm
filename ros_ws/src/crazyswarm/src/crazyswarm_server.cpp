@@ -47,9 +47,9 @@
 #ifdef ENABLE_VICON
 #include "libmotioncapture/vicon.h"
 #endif
-#ifdef ENABLE_OPTITRACK
+// #ifdef ENABLE_OPTITRACK
 #include "libmotioncapture/optitrack.h"
-#endif
+// #endif
 #ifdef ENABLE_PHASESPACE
 #include "libmotioncapture/phasespace.h"
 #endif
@@ -977,11 +977,13 @@ public:
         m_cfbc.sendExternalPoses(states);
       } else {
         std::vector<CrazyflieBroadcaster::externalPosition> positions(states.size());
+        printf("States size %u\n", states.size());
         for (size_t i = 0; i < positions.size(); ++i) {
           positions[i].id = states[i].id;
           positions[i].x  = states[i].x;
           positions[i].y  = states[i].y;
           positions[i].z  = states[i].z;
+          printf("Positions %u %f %f %f\n", i, positions[i].x, positions[i].y, positions[i].z);
         }
         m_cfbc.sendExternalPositions(positions);
       }
@@ -1118,6 +1120,8 @@ private:
   {
     bool found = false;
     for (const auto& rigidBody : *m_pMocapObjects) {
+      // std::cout<<"Name = "<<name<<std::endl; 
+      // std::cout<<"rigid name"<<rigidBody.name() <<std::endl;
       if (   rigidBody.name() == name
           && !rigidBody.occluded()) {
 
@@ -1442,16 +1446,17 @@ public:
     ros::NodeHandle nl("~");
     std::string objectTrackingType;
     nl.getParam("object_tracking_type", objectTrackingType);
+    // std::cout<<objectTrackingType<<std::endl<<std::endl<<std::endl<<std::endl<<std::endl<<std::endl;
     useMotionCaptureObjectTracking = (objectTrackingType == "motionCapture");
     nl.param<std::string>("save_point_clouds", logFilePath, "");
     nl.param<std::string>("interactive_object", interactiveObject, "");
     nl.getParam("print_latency", printLatency);
     nl.getParam("write_csvs", writeCSVs);
     nl.param<std::string>("motion_capture_type", motionCaptureType, "vicon");
-
+    std::cout<<motionCaptureType<<std::endl;
     nl.param<int>("broadcasting_num_repeats", m_broadcastingNumRepeats, 15);
     nl.param<int>("broadcasting_delay_between_repeats_ms", m_broadcastingDelayBetweenRepeatsMs, 1);
-    nl.param<bool>("send_position_only", sendPositionOnly, false);
+    nl.param<bool>("send_position_only", sendPositionOnly, true);
 
     // tilde-expansion
     wordexp_t wordexp_result;
@@ -1517,14 +1522,39 @@ public:
         /*enablePointcloud*/ !useMotionCaptureObjectTracking);
     }
 #endif
-#ifdef ENABLE_OPTITRACK
+// #ifdef ENABLE_OPTITRACK
     else if (motionCaptureType == "optitrack")
     {
+      std::vector<Eigen::Vector3f> initial_positions;
+        ros::NodeHandle nGlobal;
+        XmlRpc::XmlRpcValue crazyflies;
+        nGlobal.getParam("crazyflies", crazyflies);
+        ROS_ASSERT(crazyflies.getType() == XmlRpc::XmlRpcValue::TypeArray);
+
+        for (int32_t i = 0; i < crazyflies.size(); ++i) {
+          ROS_ASSERT(crazyflies[i].getType() == XmlRpc::XmlRpcValue::TypeStruct);
+          XmlRpc::XmlRpcValue crazyflie = crazyflies[i];
+          XmlRpc::XmlRpcValue pos = crazyflie["initialPosition"];
+            ROS_ASSERT(pos.getType() == XmlRpc::XmlRpcValue::TypeArray);
+
+            std::vector<double> posVec(3);
+            for (int32_t j = 0; j < pos.size(); ++j) {
+              ROS_ASSERT(pos[j].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+              double f = static_cast<double>(pos[j]);
+              posVec[j] = f;
+            }
+            Eigen::Affine3f m;
+            // m = Eigen::Translation3f(posVec[0], posVec[1], posVec[2]);
+            initial_positions.emplace_back(posVec[0], posVec[1], posVec[2]);
+        }
       std::string hostName;
       nl.getParam("optitrack_host_name", hostName);
-      mocap = new libmotioncapture::MotionCaptureOptitrack(hostName);
+      using namespace libmotioncapture;
+      std::cout<<"Using OptiTrack hostName"<<hostName<<'\n';
+      mocap = new MotionCaptureOptitrack(hostName, initial_positions);
+      std::cout<<"Mocap Created\n";
     }
-#endif
+// #endif
 #ifdef ENABLE_PHASESPACE
     else if (motionCaptureType == "phasespace")
     {
@@ -1571,6 +1601,7 @@ public:
       int r = 0;
       std::cout << "ch: " << channels.size() << std::endl;
       for (int channel : channels) {
+        std::cout<<"channel: "<<channel<<'\n';
         auto handle = std::async(std::launch::async,
             [&](int channel, int radio)
             {
@@ -1600,7 +1631,7 @@ public:
         m_groups.push_back(handle.get());
       }
     }
-
+std::cout<<"m_groups.size() = "<< m_groups.size() <<'\n';
     // start the groups threads
     std::vector<std::thread> threads;
     for (auto& group : m_groups) {
@@ -1640,8 +1671,9 @@ public:
 
       while (ros::ok() && !m_isEmergency) {
         // Get a frame
+        // std::cout<<"Waiting for a frame\n";
         mocap->waitForNextFrame();
-
+        // std::cout<<"Got a frame\n";
         latencies.clear();
 
         auto startIteration = std::chrono::high_resolution_clock::now();
@@ -1683,6 +1715,7 @@ public:
 
         // Get the unlabeled markers and create point cloud
         if (!useMotionCaptureObjectTracking) {
+          // printf("HERE\n");
           mocap->getPointCloud(markers);
 
           msgPointCloud.header.seq += 1;
@@ -1704,7 +1737,9 @@ public:
         if (useMotionCaptureObjectTracking || !interactiveObject.empty()) {
           // get mocap rigid bodies
           mocapObjects.clear();
-          mocap->getObjects(mocapObjects);
+          mocap->getObjects(mocapObjects );
+          printf("%lf %lf %lf\n", mocapObjects[0].m_position[0], 
+            mocapObjects[0].m_position[1], mocapObjects[0].m_position[2]);
           if (interactiveObject == "virtual") {
             Eigen::Quaternionf quat(0, 0, 0, 1);
             mocapObjects.push_back(
